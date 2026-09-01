@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f3ec">
+  <title>КофеФинансы — экономика кофейни</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top"><span class="brand-mark">К</span><span>КофеФинансы</span></a>
+    <div class="top-actions">
+      <button class="btn btn-ghost" id="exportBtn">Экспорт</button>
+      <label class="btn btn-ghost file-label">Импорт<input type="file" id="importFile" accept="application/json"></label>
+      <button class="btn btn-dark" data-open="dayModal">+ Добавить день</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">ФИНАНСОВЫЙ КАБИНЕТ</p>
+        <h1>Вся экономика кофейни<br><em>в одной чашке.</em></h1>
+        <p class="hero-copy">Доходы, расходы, рентабельность и точка безубыточности — без сложных таблиц.</p>
+      </div>
+      <div class="period-control" aria-label="Период отчёта">
+        <label>Период анализа</label>
+        <select id="periodSelect">
+          <option value="month">Текущий месяц</option>
+          <option value="prev">Прошлый месяц</option>
+          <option value="quarter">Последние 3 месяца</option>
+          <option value="year">Текущий год</option>
+          <option value="all">Всё время</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="kpi-grid" id="kpis"></section>
+
+    <section class="grid-two">
+      <article class="panel chart-panel">
+        <div class="panel-head"><div><p class="eyebrow">ДИНАМИКА</p><h2>Доходы и расходы</h2></div><div class="legend"><span><i class="income"></i>Доход</span><span><i class="expense"></i>Расход</span></div></div>
+        <div class="chart" id="chart"></div>
+      </article>
+      <article class="panel health-panel">
+        <div class="panel-head"><div><p class="eyebrow">ЗДОРОВЬЕ БИЗНЕСА</p><h2>Главные коэффициенты</h2></div></div>
+        <div id="ratios" class="ratios"></div>
+      </article>
+    </section>
+
+    <section class="grid-two lower-grid">
+      <article class="panel">
+        <div class="panel-head"><div><p class="eyebrow">ЕЖЕДНЕВНЫЙ УЧЁТ</p><h2>Операции по дням</h2></div><button class="text-btn" data-open="dayModal">Добавить запись →</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Выручка</th><th>Переменные</th><th>Чеки</th><th>Прибыль</th><th></th></tr></thead><tbody id="daysTable"></tbody></table></div>
+        <div class="empty" id="daysEmpty">Записей пока нет. Добавьте первый рабочий день.</div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><p class="eyebrow">ПОСТОЯННЫЕ РАСХОДЫ</p><h2>Ежемесячные обязательства</h2></div><button class="text-btn" data-open="fixedModal">+ Добавить</button></div>
+        <div id="fixedList" class="expense-list"></div>
+        <div class="fixed-total"><span>Итого в месяц</span><strong id="fixedTotal">0 ₽</strong></div>
+      </article>
+    </section>
+
+    <section class="panel insights-panel">
+      <div class="panel-head"><div><p class="eyebrow">ПОДРОБНЫЙ АНАЛИЗ</p><h2>Что говорят цифры</h2></div></div>
+      <div class="insights" id="insights"></div>
+    </section>
+  </main>
+
+  <footer><div class="brand"><span class="brand-mark">К</span><span>КофеФинансы</span></div><p>Данные хранятся только в вашем браузере. Регулярно делайте экспорт.</p></footer>
+
+  <dialog id="dayModal">
+    <form id="dayForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">НОВАЯ ЗАПИСЬ</p><h2>Рабочий день</h2></div><button class="close" value="cancel" formnovalidate>×</button></div>
+      <input type="hidden" name="id">
+      <div class="field"><label>Дата</label><input required type="date" name="date"></div>
+      <div class="form-grid"><div class="field"><label>Выручка, ₽</label><input required min="0" step="0.01" type="number" name="revenue" placeholder="45 000"></div><div class="field"><label>Количество чеков</label><input min="0" step="1" type="number" name="orders" placeholder="120"></div></div>
+      <p class="form-section">Переменные расходы за день</p>
+      <div class="form-grid"><div class="field"><label>Сырьё и продукты, ₽</label><input min="0" step="0.01" type="number" name="ingredients" placeholder="12 000"></div><div class="field"><label>Упаковка, ₽</label><input min="0" step="0.01" type="number" name="packaging" placeholder="1 500"></div><div class="field"><label>Комиссии, ₽</label><input min="0" step="0.01" type="number" name="fees" placeholder="800"></div><div class="field"><label>Прочее, ₽</label><input min="0" step="0.01" type="number" name="other" placeholder="500"></div></div>
+      <div class="field"><label>Комментарий</label><input name="note" placeholder="Например, акция или плохая погода"></div>
+      <button class="btn btn-dark submit" value="default">Сохранить день</button>
+    </form>
+  </dialog>
+
+  <dialog id="fixedModal">
+    <form id="fixedForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">НОВАЯ СТАТЬЯ</p><h2>Постоянный расход</h2></div><button class="close" value="cancel" formnovalidate>×</button></div>
+      <div class="field"><label>Название</label><input required name="name" placeholder="Аренда"></div>
+      <div class="field"><label>Сумма в месяц, ₽</label><input required min="0" step="0.01" type="number" name="amount" placeholder="120 000"></div>
+      <select name="category"><option>Помещение</option><option>Команда</option><option>Маркетинг</option><option>Сервисы</option><option>Налоги</option><option>Другое</option></select>
+      <button class="btn btn-dark submit" value="default">Добавить расход</button>
+    </form>
+  </dialog>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
