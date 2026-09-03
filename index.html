@@ -9,9 +9,43 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="auth.css" />
 </head>
-<body>
-  <div class="app-shell">
+<body class="auth-pending">
+  <section class="auth-screen" id="authScreen" aria-live="polite">
+    <div class="auth-visual">
+      <a class="brand auth-brand" href="#"><span class="brand-mark">✣</span><span>Vibe</span></a>
+      <div class="auth-copy"><span class="auth-kicker">НОВОЕ ОБЩЕНИЕ</span><h1>Люди, идеи и моменты — в одном месте.</h1><p>Находите своих, делитесь мыслями и создавайте сообщества вокруг того, что действительно важно.</p></div>
+      <div class="auth-bubbles"><span>Фотография</span><span>Музыка</span><span>Путешествия</span><span>Технологии</span></div>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-card">
+        <div class="auth-mobile-logo"><span class="brand-mark">✣</span><strong>Vibe</strong></div>
+        <div id="phoneStep">
+          <span class="auth-kicker">ДОБРО ПОЖАЛОВАТЬ</span><h2>Вход или регистрация</h2><p class="auth-note">Введите номер телефона. Мы отправим одноразовый код подтверждения по SMS.</p>
+          <form id="phoneForm" class="auth-form">
+            <label>Номер телефона</label>
+            <div class="phone-field"><span>+7</span><input id="phoneInput" name="phone" inputmode="tel" autocomplete="tel" placeholder="999 123-45-67" maxlength="15" required></div>
+            <button class="primary-btn auth-submit" type="submit">Получить код</button>
+          </form>
+          <p class="legal">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>
+        </div>
+        <div id="codeStep" hidden>
+          <button class="auth-back" id="authBack" type="button">← Изменить номер</button>
+          <span class="auth-kicker">ПОДТВЕРЖДЕНИЕ</span><h2>Введите код из SMS</h2><p class="auth-note">Код отправлен на <strong id="sentPhone"></strong></p>
+          <form id="codeForm" class="auth-form">
+            <label>Код подтверждения</label>
+            <input class="code-input" id="codeInput" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required>
+            <button class="primary-btn auth-submit" type="submit">Продолжить</button>
+          </form>
+          <button class="resend" id="resendCode" type="button" disabled>Отправить код повторно через 60 сек.</button>
+        </div>
+        <div class="auth-message" id="authMessage"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="appShell">
     <aside class="sidebar">
       <a class="brand" href="#"><span class="brand-mark">✣</span><span>Vibe</span></a>
       <nav class="nav-list" id="mainNav">
@@ -25,7 +59,7 @@
         <button class="nav-item" data-view="Настройки">⚙ <span>Настройки</span></button>
       </nav>
       <button class="primary-btn" id="openComposer">＋ Создать пост</button>
-      <div class="profile-mini"><div class="avatar">ЕК</div><div><strong>Екатерина</strong><span>@kate_light</span></div><button>•••</button></div>
+      <div class="profile-mini"><div class="avatar">ЕК</div><div><strong>Екатерина</strong><span id="profilePhone">@kate_light</span></div><button id="logoutBtn" title="Выйти">↪</button></div>
       <div class="progress-card"><strong>Ваш прогресс</strong><p>Заполните профиль на 80%</p><div><i></i></div></div>
       <button class="theme-toggle" id="themeToggle">☼ <span>Тёмная тема</span><i></i></button>
     </aside>
@@ -35,17 +69,8 @@
         <label class="search"><span>⌕</span><input id="searchInput" placeholder="Поиск людей, постов, сообществ..." /></label>
         <div class="top-actions"><button>▢</button><button>♢<i></i></button><div class="avatar small">ЕК</div></div>
       </header>
-
-      <section class="stories-wrap">
-        <div class="stories" id="stories"></div>
-      </section>
-
-      <section class="composer-card">
-        <div class="avatar">ЕК</div>
-        <button class="composer-placeholder" id="composerPlaceholder">Что у вас нового?</button>
-        <div class="composer-actions"><button>▧ Фото</button><button>▣ Видео</button><button>♫ Музыка</button><button>☷ Опрос</button><button>⌖ Геолокация</button><button>☺</button></div>
-      </section>
-
+      <section class="stories-wrap"><div class="stories" id="stories"></div></section>
+      <section class="composer-card"><div class="avatar">ЕК</div><button class="composer-placeholder" id="composerPlaceholder">Что у вас нового?</button><div class="composer-actions"><button>▧ Фото</button><button>▣ Видео</button><button>♫ Музыка</button><button>☷ Опрос</button><button>⌖ Геолокация</button><button>☺</button></div></section>
       <div class="feed-tabs"><button class="active">Для вас</button><button>Подписки</button><button>Популярное</button></div>
       <section class="feed" id="feed"></section>
     </main>
@@ -58,10 +83,10 @@
     </aside>
   </div>
 
-  <nav class="mobile-nav"><button class="active">⌂<span>Главная</span></button><button>♧<span>Сообщества</span></button><button class="mobile-create" id="mobileCreate">＋</button><button>◌<span>Сообщения</span></button><button>♙<span>Профиль</span></button></nav>
-
+  <nav class="mobile-nav" id="mobileNav"><button class="active">⌂<span>Главная</span></button><button>♧<span>Сообщества</span></button><button class="mobile-create" id="mobileCreate">＋</button><button>◌<span>Сообщения</span></button><button>♙<span>Профиль</span></button></nav>
   <dialog id="composerModal"><form id="postForm" method="dialog"><div class="modal-head"><h2>Новый пост</h2><button class="close" value="cancel">×</button></div><textarea name="text" maxlength="500" placeholder="Поделитесь мыслью..." required></textarea><input name="image" placeholder="Ссылка на изображение (необязательно)" /><div class="modal-actions"><span>Фото · Видео · Опрос</span><button class="primary-btn" value="default">Опубликовать</button></div></form></dialog>
   <div class="toast" id="toast"></div>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
