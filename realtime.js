@@ -30,7 +30,7 @@
     }
     list.innerHTML = items.slice(0, 30).map(event => {
       const title = event.payload?.title || titleFor(event.type);
-      const text = event.payload?.text || textFor(event.type);
+      const text = event.payload?.text || `Событие: ${event.type}`;
       return `<article class="notification-item"><span class="notification-icon">${iconFor(event.type)}</span><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p><time>${formatTime(event.createdAt)}</time></div></article>`;
     }).join('');
   }
@@ -43,7 +43,6 @@
     if (type.startsWith('mention.')) return 'Вас упомянули';
     return 'Новое событие';
   }
-  function textFor(type) { return `Событие: ${type}`; }
   function iconFor(type) {
     if (type.startsWith('message.')) return '◌';
     if (type.startsWith('comment.')) return '▢';
@@ -56,7 +55,7 @@
     catch { return ''; }
   }
   function escapeHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   }
 
   function receive(event) {
@@ -73,10 +72,7 @@
     if (!running) return;
     try {
       const response = await fetch(`/api/realtime/events?cursor=${cursor}`, { credentials: 'same-origin', cache: 'no-store' });
-      if (response.status === 401) {
-        stop();
-        return;
-      }
+      if (response.status === 401) return stop();
       if (response.ok) {
         const data = await response.json();
         for (const event of data.events || []) receive(event);
@@ -101,7 +97,6 @@
     running = false;
     clearTimeout(timer);
   }
-
   async function detectSession() {
     try {
       const response = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
@@ -120,8 +115,12 @@
   document.addEventListener('click', event => { if (!panel.hidden && !panel.contains(event.target) && event.target !== bell) panel.hidden = true; });
   document.addEventListener('visibilitychange', () => { if (running) { clearTimeout(timer); poll(); } });
   window.addEventListener('online', () => { if (running) poll(); else detectSession(); });
-  document.addEventListener('vibe:auth-success', event => start(event.detail?.realtimeCursor || 0));
-  document.addEventListener('vibe:logout', stop);
+
+  const authObserver = new MutationObserver(() => {
+    if (document.body.classList.contains('auth-pending')) stop();
+    else detectSession();
+  });
+  authObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
   window.VibeRealtime = { start, stop, refresh: poll };
   detectSession();
