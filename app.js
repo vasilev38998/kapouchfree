@@ -1,23 +1,103 @@
-const KEY='coffeeFinance.v1';
-const starter={days:[],fixed:[{id:'rent',name:'Аренда',amount:0,category:'Помещение'},{id:'salary',name:'Зарплаты',amount:0,category:'Команда'},{id:'utilities',name:'Коммунальные услуги',amount:0,category:'Помещение'}]};
-let state=load();
-const $=s=>document.querySelector(s), money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0))+' ₽', pct=n=>(Number.isFinite(n)?n:0).toFixed(1).replace('.',',')+'%';
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||structuredClone(starter)}catch{return structuredClone(starter)}}
-function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
-function range(){const now=new Date(),v=$('#periodSelect').value;let from=new Date(0),to=new Date(8640000000000000);if(v==='month')from=new Date(now.getFullYear(),now.getMonth(),1);if(v==='prev'){from=new Date(now.getFullYear(),now.getMonth()-1,1);to=new Date(now.getFullYear(),now.getMonth(),0,23,59,59)}if(v==='quarter')from=new Date(now.getFullYear(),now.getMonth()-2,1);if(v==='year')from=new Date(now.getFullYear(),0,1);return state.days.filter(d=>{let x=new Date(d.date+'T12:00:00');return x>=from&&x<=to})}
-function totals(days=range()){const revenue=days.reduce((s,d)=>s+d.revenue,0),variable=days.reduce((s,d)=>s+d.ingredients+d.packaging+d.fees+d.other,0),orders=days.reduce((s,d)=>s+d.orders,0),fixed=state.fixed.reduce((s,x)=>s+x.amount,0),months=$('#periodSelect').value==='year'?12:$('#periodSelect').value==='quarter'?3:$('#periodSelect').value==='all'?Math.max(1,new Set(days.map(d=>d.date.slice(0,7))).size):1,fixedApplied=fixed*months,gross=revenue-variable,profit=gross-fixedApplied;return{revenue,variable,orders,fixed,fixedApplied,gross,profit,margin:revenue?profit/revenue*100:0,grossMargin:revenue?gross/revenue*100:0,avg:orders?revenue/orders:0,roi:(variable+fixedApplied)?profit/(variable+fixedApplied)*100:0,breakEven:revenue?fixedApplied/(gross/revenue):0}}
-function render(){const d=range(),t=totals(d);$('#kpis').innerHTML=[['↗','Выручка',money(t.revenue),`${d.length} рабочих дней`],['◇','Чистая прибыль',money(t.profit),pct(t.margin)+' от выручки'],['◎','Средний чек',money(t.avg),`${t.orders} чеков`],['⌁','Точка безубыточности',money(t.breakEven),'необходимая выручка']].map((x,i)=>`<article class="kpi"><div class="kpi-icon">${x[0]}</div><div class="kpi-label">${x[1]}</div><div class="kpi-value ${i===1?(t.profit>=0?'positive':'negative'):''}">${x[2]}</div><div class="kpi-note">${x[3]}</div></article>`).join('');renderChart(d);renderRatios(t);renderDays(d);renderFixed();renderInsights(t,d)}
-function renderChart(days){const el=$('#chart');if(!days.length){el.innerHTML='<div class="chart-empty">Добавьте данные, чтобы увидеть динамику</div>';return}let points=[...days].sort((a,b)=>a.date.localeCompare(b.date)).slice(-20),max=Math.max(...points.flatMap(d=>[d.revenue,d.ingredients+d.packaging+d.fees+d.other]),1);el.innerHTML=points.map(d=>`<div class="bar-group" title="${d.date}: ${money(d.revenue)}"><i class="bar income" style="height:${d.revenue/max*90}%"></i><i class="bar expense" style="height:${(d.ingredients+d.packaging+d.fees+d.other)/max*90}%"></i><small>${d.date.slice(8)}</small></div>`).join('')}
-function renderRatios(t){let arr=[['Валовая маржа',t.grossMargin,60,'Выручка за вычетом переменных затрат'],['Рентабельность продаж',t.margin,20,'Чистая прибыль на каждый рубль выручки'],['ROI расходов',t.roi,30,'Отдача на все вложенные средства'],['Доля переменных затрат',t.revenue?t.variable/t.revenue*100:0,35,'Сырьё, упаковка, комиссии и прочее']];$('#ratios').innerHTML=arr.map(x=>`<div class="ratio"><div class="ratio-top"><span>${x[0]}</span><strong class="${x[1]>=x[2]?'positive':''}">${pct(x[1])}</strong></div><div class="progress"><i style="width:${Math.max(0,Math.min(100,x[1]))}%"></i></div><p>${x[2]?'Ориентир: '+x[2]+'%. ':''}${x[3]}</p></div>`).join('')}
-function renderDays(days){let rows=[...days].sort((a,b)=>b.date.localeCompare(a.date));$('#daysEmpty').style.display=rows.length?'none':'block';$('#daysTable').innerHTML=rows.map(d=>{let v=d.ingredients+d.packaging+d.fees+d.other,p=d.revenue-v;return`<tr><td>${new Date(d.date+'T12:00').toLocaleDateString('ru-RU',{day:'2-digit',month:'short'})}</td><td><strong>${money(d.revenue)}</strong></td><td>${money(v)}</td><td>${d.orders}</td><td class="${p>=0?'positive':'negative'}">${money(p)}</td><td><button class="delete" data-day="${d.id}" title="Удалить">×</button></td></tr>`}).join('')}
-function renderFixed(){$('#fixedList').innerHTML=state.fixed.map(x=>`<div class="expense-item"><span class="expense-icon">${x.category==='Команда'?'♙':'⌂'}</span><div><p>${esc(x.name)}</p><small>${esc(x.category)}</small></div><strong>${money(x.amount)}</strong><button class="delete" data-fixed="${x.id}">×</button></div>`).join('');$('#fixedTotal').textContent=money(state.fixed.reduce((s,x)=>s+x.amount,0))}
-function renderInsights(t,days){let daily=days.length?t.revenue/days.length:0,needed=Math.max(0,t.breakEven-t.revenue),best=days.length?[...days].sort((a,b)=>b.revenue-a.revenue)[0]:null;$('#insights').innerHTML=[['☕','Средняя выручка в день',money(daily)+' — ваш текущий темп.'],['◉','Запас прочности',t.revenue?`${pct((t.revenue-t.breakEven)/t.revenue*100)} до точки безубыточности.`:'Появится после внесения выручки.'],['↗','Лучший день',best?`${new Date(best.date+'T12:00').toLocaleDateString('ru-RU')} — ${money(best.revenue)}.`:'Пока недостаточно данных.'],['◎','До безубыточности',needed?`Нужно заработать ещё ${money(needed)}.`:'Расходы покрыты — бизнес в плюсе.']].map(x=>`<div class="insight"><span>${x[0]}</span><strong>${x[1]}</strong><p>${x[2]}</p></div>`).join('')}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-document.addEventListener('click',e=>{let open=e.target.closest('[data-open]');if(open){let dlg=$('#'+open.dataset.open);if(open.dataset.open==='dayModal')dlg.querySelector('[name=date]').value=new Date().toISOString().slice(0,10);dlg.showModal()}let day=e.target.dataset.day;if(day&&confirm('Удалить запись за день?')){state.days=state.days.filter(x=>x.id!==day);save()}let fixed=e.target.dataset.fixed;if(fixed&&confirm('Удалить постоянный расход?')){state.fixed=state.fixed.filter(x=>x.id!==fixed);save()}});
-$('#dayForm').addEventListener('submit',e=>{e.preventDefault();let f=new FormData(e.target),num=k=>Number(f.get(k))||0;state.days.push({id:crypto.randomUUID(),date:f.get('date'),revenue:num('revenue'),orders:num('orders'),ingredients:num('ingredients'),packaging:num('packaging'),fees:num('fees'),other:num('other'),note:f.get('note')});save();e.target.closest('dialog').close();e.target.reset();toast('Рабочий день сохранён')});
-$('#fixedForm').addEventListener('submit',e=>{e.preventDefault();let f=new FormData(e.target);state.fixed.push({id:crypto.randomUUID(),name:f.get('name'),amount:Number(f.get('amount'))||0,category:f.get('category')});save();e.target.closest('dialog').close();e.target.reset();toast('Расход добавлен')});
-$('#periodSelect').addEventListener('change',render);
-$('#exportBtn').addEventListener('click',()=>{let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));a.download=`coffee-finance-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);toast('Резервная копия создана')});
-$('#importFile').addEventListener('change',async e=>{try{let data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data.days)||!Array.isArray(data.fixed))throw Error();state=data;save();toast('Данные восстановлены')}catch{alert('Не удалось прочитать файл. Выберите корректный JSON-экспорт.')}e.target.value=''});
-function toast(s){let el=$('#toast');el.textContent=s;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
-render();
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+const stories = ['Добавить','Аня','Дмитрий','Мария','Илья','Саша','Вика','Егор'];
+const posts = [
+  {id:1,name:'Алексей Морозов',handle:'@alex.moroz',time:'2 ч назад',initials:'АМ',text:'Иногда нужно просто остановиться и насладиться моментом ✨',image:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',likes:128,comments:24,shares:7},
+  {id:2,name:'Анна Смирнова',handle:'@anna.smirnova',time:'5 ч назад',initials:'АС',text:'Маленькие шаги каждый день приводят к большим результатам.',image:'https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&w=1200&q=80',likes:96,comments:18,shares:4}
+];
+const people = [
+  ['Ирина Волкова','@irina.volkova','ИВ'],['Никита Лебедев','@nik.lebe','НЛ'],['Полина Козлова','@polina.koz','ПК']
+];
+const communities = [
+  ['Путешествия','125K участников','П'],['Фотография','98K участников','Ф'],['Книги и мысли','76K участников','К']
+];
+
+function renderStories(){
+  $('#stories').innerHTML = stories.map((name,i)=>`<div class="story ${i===0?'add':''}"><div class="story-ring"><div>${i===0?'＋':name.slice(0,1)}</div></div><span>${name}</span></div>`).join('');
+}
+
+function renderFeed(items = posts){
+  $('#feed').innerHTML = items.map(p=>`<article class="post" data-id="${p.id}">
+    <div class="post-head"><div class="avatar">${p.initials}</div><div class="post-user"><strong>${p.name}</strong><span>${p.handle} · ${p.time}</span></div><button class="more">•••</button></div>
+    <p class="post-text">${escapeHtml(p.text)}</p>
+    ${p.image?`<img class="post-image" src="${p.image}" alt="Публикация ${p.name}">`:''}
+    <div class="post-actions"><button class="like">♡ <span>${p.likes}</span></button><button>▢ ${p.comments}</button><button>↗ ${p.shares}</button><button class="save">⌑</button></div>
+  </article>`).join('');
+}
+
+function renderSidebars(){
+  $('#events').innerHTML = `<div class="event"><div class="date-box"><strong>12</strong><span>ИЮН</span></div><div><p>Концерт группы «Свет»</p><small>19:00 · Москва</small></div></div><div class="event"><div class="date-box"><strong>18</strong><span>ИЮН</span></div><div><p>Выставка современного искусства</p><small>12:00 · ЦСИ Винзавод</small></div></div>`;
+  $('#people').innerHTML = people.map(p=>`<div class="person"><div class="avatar">${p[2]}</div><div><strong>${p[0]}</strong><span>${p[1]}</span></div><button class="follow">Подписаться</button></div>`).join('');
+  $('#communities').innerHTML = communities.map(c=>`<div class="community"><div class="avatar">${c[2]}</div><div><strong>${c[0]}</strong><span>${c[1]}</span></div><button>＋</button></div>`).join('');
+}
+
+function openComposer(){ $('#composerModal').showModal(); }
+$('#openComposer').addEventListener('click', openComposer);
+$('#composerPlaceholder').addEventListener('click', openComposer);
+$('#mobileCreate').addEventListener('click', openComposer);
+
+$('#postForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const data = new FormData(e.target);
+  posts.unshift({
+    id:Date.now(),name:'Екатерина',handle:'@kate_light',time:'только что',initials:'ЕК',
+    text:data.get('text'),image:data.get('image'),likes:0,comments:0,shares:0
+  });
+  renderFeed(posts);
+  e.target.reset();
+  $('#composerModal').close();
+  toast('Пост опубликован');
+});
+
+document.addEventListener('click',(e)=>{
+  const like = e.target.closest('.like');
+  if(like){
+    const article = like.closest('.post');
+    const post = posts.find(p=>String(p.id)===article.dataset.id);
+    const on = like.classList.toggle('liked');
+    post.likes += on ? 1 : -1;
+    like.innerHTML = `${on?'♥':'♡'} <span>${post.likes}</span>`;
+  }
+  const follow = e.target.closest('.follow');
+  if(follow){
+    const on = follow.classList.toggle('following');
+    follow.textContent = on ? 'Вы подписаны' : 'Подписаться';
+  }
+});
+
+$('#themeToggle').addEventListener('click',()=>{
+  document.body.classList.toggle('dark');
+  $('#themeToggle span').textContent = document.body.classList.contains('dark') ? 'Светлая тема' : 'Тёмная тема';
+});
+
+$('#searchInput').addEventListener('input',(e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  renderFeed(!q ? posts : posts.filter(p=>`${p.name} ${p.handle} ${p.text}`.toLowerCase().includes(q)));
+});
+
+$$('.feed-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+  $$('.feed-tabs button').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active');
+  toast(`Раздел «${btn.textContent}» открыт`);
+}));
+
+$$('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{
+  $$('.nav-item').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active');
+  toast(`${btn.dataset.view}: экран будет подключён следующим этапом`);
+}));
+
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(text){
+  const el = $('#toast');
+  el.textContent = text;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),1800);
+}
+
+renderStories();
+renderFeed();
+renderSidebars();
