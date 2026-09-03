@@ -10,9 +10,13 @@ const APP_ORIGIN = process.env.APP_ORIGIN || `http://localhost:${PORT}`;
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RESEND_MS = 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
+const IP_WINDOW_MS = 15 * 60 * 1000;
+const IP_MAX_SENDS = 8;
 
+// Prototype storage. Next backend phase will move users, sessions and OTP metadata to a database/Redis.
 const otpStore = new Map();
 const sessions = new Map();
+const ipRate = new Map();
 
 const mime = {
   '.html': 'text/html; charset=utf-8',
@@ -26,13 +30,22 @@ const mime = {
 };
 
 function json(res, status, body, extraHeaders = {}) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...extraHeaders });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    ...extraHeaders
+  });
   res.end(JSON.stringify(body));
 }
 
 async function bodyJson(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 16_384) throw new Error('body_too_large');
+    chunks.push(chunk);
+  }
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
@@ -57,19 +70,48 @@ function parseCookies(req) {
   }));
 }
 
-async function sendSms(phone, code) {
+function requestIp(req) {
+  return (req.socket.remoteAddress || '').replace(/^::ffff:/, '') || 'unknown';
+}
+
+function checkIpRate(ip) {
+  const now = Date.now();
+  const recent = (ipRate.get(ip) || []).filter(ts => now - ts < IP_WINDOW_MS);
+  if (recent.length >= IP_MAX_SENDS) {
+    ipRate.set(ip, recent);
+    return false;
+  }
+  recent.push(now);
+  ipRate.set(ip, recent);
+  return true;
+}
+
+async function sendSms(phone, code, ip) {
   if (!SMSRU_API_ID) {
     console.log(`[DEV OTP] +${phone}: ${code}`);
     return { dev: true };
   }
-  const endpoint = new URL('https://sms.ru/sms/send');
-  endpoint.searchParams.set('api_id', SMSRU_API_ID);
-  endpoint.searchParams.set('to', phone);
-  endpoint.searchParams.set('msg', `Vibe: код входа ${code}. Никому его не сообщайте.`);
-  endpoint.searchParams.set('json', '1');
-  const response = await fetch(endpoint);
+
+  const form = new URLSearchParams({
+    api_id: SMSRU_API_ID,
+    to: phone,
+    msg: `Vibe: код входа ${code}. Никому его не сообщайте.`,
+    json: '1'
+  });
+  if (ip && ip !== 'unknown') form.set('ip', ip);
+
+  const response = await fetch('https://sms.ru/sms/send', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: form
+  });
+  if (!response.ok) throw new Error(`SMS.RU HTTP ${response.status}`);
+
   const data = await response.json();
-  if (Number(data.status) !== 1) throw new Error(data.status_text || 'SMS.RU request failed');
+  const item = data.sms?.[phone];
+  if (data.status !== 'OK' || Number(data.status_code) !== 100 || !item || item.status !== 'OK') {
+    throw new Error(item?.status_text || data.status_text || 'SMS.RU request failed');
+  }
   return data;
 }
 
@@ -87,19 +129,35 @@ async function handleApi(req, res, url) {
     const phone = normalizePhone(payload.phone);
     if (!phone) return json(res, 400, { error: 'invalid_phone' });
 
+    const ip = requestIp(req);
+    if (!checkIpRate(ip)) return json(res, 429, { error: 'ip_rate_limited' });
+
     const existing = otpStore.get(phone);
     const now = Date.now();
     if (existing && now - existing.sentAt < OTP_RESEND_MS) {
-      return json(res, 429, { error: 'too_many_requests', retryAfter: Math.ceil((OTP_RESEND_MS - (now - existing.sentAt)) / 1000) });
+      return json(res, 429, {
+        error: 'too_many_requests',
+        retryAfter: Math.ceil((OTP_RESEND_MS - (now - existing.sentAt)) / 1000)
+      });
     }
 
     const code = String(randomInt(100000, 1000000));
     try {
-      await sendSms(phone, code);
-      otpStore.set(phone, { hash: hashOtp(phone, code), expiresAt: now + OTP_TTL_MS, sentAt: now, attempts: 0 });
-      return json(res, 200, { ok: true, phone: `+${phone}`, expiresIn: OTP_TTL_MS / 1000, devMode: !SMSRU_API_ID });
+      await sendSms(phone, code, ip);
+      otpStore.set(phone, {
+        hash: hashOtp(phone, code),
+        expiresAt: now + OTP_TTL_MS,
+        sentAt: now,
+        attempts: 0
+      });
+      return json(res, 200, {
+        ok: true,
+        phone: `+${phone}`,
+        expiresIn: OTP_TTL_MS / 1000,
+        devMode: !SMSRU_API_ID
+      });
     } catch (error) {
-      console.error(error);
+      console.error('SMS delivery failed:', error.message);
       return json(res, 502, { error: 'sms_delivery_failed' });
     }
   }
@@ -111,6 +169,7 @@ async function handleApi(req, res, url) {
     const code = String(payload.code || '').replace(/\D/g, '');
     const record = otpStore.get(phone);
     if (!phone || code.length !== 6 || !record) return json(res, 400, { error: 'invalid_code' });
+
     if (Date.now() > record.expiresAt) {
       otpStore.delete(phone);
       return json(res, 400, { error: 'code_expired' });
@@ -142,7 +201,9 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const sessionId = parseCookies(req).vibe_session;
     if (sessionId) sessions.delete(sessionId);
-    return json(res, 200, { ok: true }, { 'set-cookie': 'vibe_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' });
+    return json(res, 200, { ok: true }, {
+      'set-cookie': 'vibe_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'
+    });
   }
 
   return json(res, 404, { error: 'not_found' });
@@ -150,11 +211,15 @@ async function handleApi(req, res, url) {
 
 async function serveStatic(req, res, url) {
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;
-  const safe = normalize(requested).replace(/^([.][.][/\\])+/, '');
+  const safe = normalize(requested).replace(/^([/\\])+/, '').replace(/^([.][.][/\\])+/, '');
   const filePath = join(process.cwd(), safe);
   try {
     const data = await readFile(filePath);
-    res.writeHead(200, { 'content-type': mime[extname(filePath)] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'content-type': mime[extname(filePath)] || 'application/octet-stream',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'strict-origin-when-cross-origin'
+    });
     res.end(data);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
