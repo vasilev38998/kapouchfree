@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="auth.css" />
 </head>
 <body class="auth-pending">
   <section class="auth-screen" id="authScreen" aria-live="polite">
@@ -85,6 +86,7 @@
   <nav class="mobile-nav" id="mobileNav"><button class="active">⌂<span>Главная</span></button><button>♧<span>Сообщества</span></button><button class="mobile-create" id="mobileCreate">＋</button><button>◌<span>Сообщения</span></button><button>♙<span>Профиль</span></button></nav>
   <dialog id="composerModal"><form id="postForm" method="dialog"><div class="modal-head"><h2>Новый пост</h2><button class="close" value="cancel">×</button></div><textarea name="text" maxlength="500" placeholder="Поделитесь мыслью..." required></textarea><input name="image" placeholder="Ссылка на изображение (необязательно)" /><div class="modal-actions"><span>Фото · Видео · Опрос</span><button class="primary-btn" value="default">Опубликовать</button></div></form></dialog>
   <div class="toast" id="toast"></div>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
